@@ -14,12 +14,13 @@ import {
 process.env.DISABLE_SERVER = 'true';
 
 describe('MCP Tool Handlers', () => {
-  const testVaultPath = path.resolve(process.cwd(), 'tests', 'test-vault');
+  // The relative path inside the vault - during tests the vault is the root
+  const testVaultRelativePath = 'tests/test-vault';
   
   test('ListAllTasksArgsSchema should validate correctly', () => {
     // Valid inputs
     expect(() => ListAllTasksArgsSchema.parse({})).not.toThrow();
-    expect(() => ListAllTasksArgsSchema.parse({ path: testVaultPath })).not.toThrow();
+    expect(() => ListAllTasksArgsSchema.parse({ path: testVaultRelativePath })).not.toThrow();
     
     // Invalid path type should fail
     expect(() => 
@@ -31,7 +32,7 @@ describe('MCP Tool Handlers', () => {
     // Valid inputs
     expect(() => QueryTasksArgsSchema.parse({ query: 'done' })).not.toThrow();
     expect(() => QueryTasksArgsSchema.parse({ 
-      path: testVaultPath,
+      path: testVaultRelativePath,
       query: 'not done'
     })).not.toThrow();
     
@@ -47,7 +48,7 @@ describe('MCP Tool Handlers', () => {
   });
   
   test('handleListAllTasksRequest should return tasks', async () => {
-    const result = await handleListAllTasksRequest({ path: testVaultPath });
+    const result = await handleListAllTasksRequest({ path: testVaultRelativePath });
     expect(result.content).toBeDefined();
     expect(result.content.length).toBe(1);
     expect(result.content[0].type).toBe('text');
@@ -69,7 +70,7 @@ describe('MCP Tool Handlers', () => {
   
   test('handleQueryTasksRequest should return filtered tasks', async () => {
     const result = await handleQueryTasksRequest({ 
-      path: testVaultPath,
+      path: testVaultRelativePath,
       query: 'done'
     });
     
@@ -88,7 +89,7 @@ describe('MCP Tool Handlers', () => {
   
   test('handleQueryTasksRequest should handle complex queries', async () => {
     const result = await handleQueryTasksRequest({ 
-      path: testVaultPath,
+      path: testVaultRelativePath,
       query: `not done
 priority is high`
     });
@@ -103,5 +104,62 @@ priority is high`
     expect(tasks.every((task: any) => 
       task.status === 'incomplete' && task.priority === 'high'
     )).toBe(true);
+  });
+  
+  test('handleListAllTasksRequest should treat paths as relative to vault directory', async () => {
+    // Use the path relative to the test environment's working directory
+    // In this case, the 'tests' directory contains 'test-vault'
+    const result = await handleListAllTasksRequest({ path: 'tests/test-vault' });
+    
+    expect(result.content).toBeDefined();
+    expect(result.content[0].type).toBe('text');
+    
+    const tasks = JSON.parse(result.content[0].text);
+    expect(Array.isArray(tasks)).toBe(true);
+    expect(tasks.length).toBeGreaterThan(0);
+    
+    // Verify file paths in tasks show the correct path
+    expect(tasks.some((task: any) => 
+      task.filePath.includes('sample-tasks.md')
+    )).toBe(true);
+  });
+  
+  test('handleQueryTasksRequest should treat paths as relative to vault directory', async () => {
+    // Use the path relative to the test environment's working directory
+    const result = await handleQueryTasksRequest({ 
+      path: 'tests/test-vault',
+      query: 'done'
+    });
+    
+    expect(result.content).toBeDefined();
+    expect(result.content[0].type).toBe('text');
+    
+    const tasks = JSON.parse(result.content[0].text);
+    expect(Array.isArray(tasks)).toBe(true);
+    expect(tasks.length).toBeGreaterThan(0);
+    
+    // Should only have completed tasks
+    expect(tasks.every((task: any) => 
+      task.status === 'complete'
+    )).toBe(true);
+  });
+  
+  test('handleListAllTasksRequest should reject paths with directory traversal', async () => {
+    // Using '..' in the path should be rejected
+    const result = await handleListAllTasksRequest({ path: '../' });
+    
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('directory traversal');
+  });
+  
+  test('handleQueryTasksRequest should reject paths with directory traversal', async () => {
+    // Using '..' in the path should be rejected
+    const result = await handleQueryTasksRequest({ 
+      path: 'test-vault/../',
+      query: 'done'
+    });
+    
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('directory traversal');
   });
 });

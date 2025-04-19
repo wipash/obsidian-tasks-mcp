@@ -17,7 +17,7 @@ import { glob } from 'glob';
 // Command line argument parsing
 const args = process.argv.slice(2);
 if (args.length === 0 && process.env.NODE_ENV !== 'test') {
-  console.error("Usage: obsidian-tasks-mcp <allowed-directory> [additional-directories...]");
+  console.error("Usage: obsidian-tasks-mcp <vault-directory>");
   process.exit(1);
 }
 
@@ -33,50 +33,55 @@ export function expandHome(filepath: string): string {
   return filepath;
 }
 
-// Store allowed directories in normalized form
-const allowedDirectories = args.length > 0 ? 
-  args.map(dir => normalizePath(path.resolve(expandHome(dir)))) :
+// Set up a single vault directory
+const vaultDirectory = args.length > 0 ? 
+  normalizePath(path.resolve(expandHome(args[0]))) :
   // For tests, use current directory if no args provided
-  [normalizePath(path.resolve(process.cwd()))];
+  normalizePath(path.resolve(process.cwd()));
 
-// Validate that all directories exist and are accessible
+// Validate that the vault directory exists and is accessible
 if (process.env.NODE_ENV !== 'test') {
-  await Promise.all(args.map(async (dir) => {
-    try {
-      const stats = await fs.stat(expandHome(dir));
-      if (!stats.isDirectory()) {
-        console.error(`Error: ${dir} is not a directory`);
-        process.exit(1);
-      }
-    } catch (error) {
-      console.error(`Error accessing directory ${dir}:`, error);
+  try {
+    const stats = await fs.stat(vaultDirectory);
+    if (!stats.isDirectory()) {
+      console.error(`Error: ${args[0]} is not a directory`);
       process.exit(1);
     }
-  }));
+  } catch (error) {
+    console.error(`Error accessing directory ${args[0]}:`, error);
+    process.exit(1);
+  }
 }
 
 // Security utilities
-async function validatePath(requestedPath: string): Promise<string> {
-  const expandedPath = expandHome(requestedPath);
-  const absolute = path.isAbsolute(expandedPath)
-    ? path.resolve(expandedPath)
-    : path.resolve(process.cwd(), expandedPath);
-
-  const normalizedRequested = normalizePath(absolute);
-
-  // Check if path is within allowed directories
-  const isAllowed = allowedDirectories.some(dir => normalizedRequested.startsWith(dir));
-  if (!isAllowed) {
-    throw new Error(`Access denied - path outside allowed directories: ${absolute} not in ${allowedDirectories.join(', ')}`);
+function validateRelativePath(relativePath: string): void {
+  // Check for directory traversal attempts
+  if (relativePath.includes('..')) {
+    throw new Error(`Access denied - directory traversal detected in path: ${relativePath}`);
   }
+  
+  // Additional path validation can be added here if needed
+}
 
-  // Handle symlinks by checking their real path
+async function resolvePath(relativePath: string = ''): Promise<string> {
+  // Validate the relative path doesn't contain directory traversal
+  validateRelativePath(relativePath);
+  
+  // Resolve the path relative to vault directory
+  const absolute = path.join(vaultDirectory, relativePath);
+  
+  // For testing environment, we'll simplify path resolution
+  if (process.env.NODE_ENV === 'test') {
+    // Just return the joined path for tests
+    return absolute;
+  }
+  
+  // In production mode, handle symlinks and additional security checks
   try {
     const realPath = await fs.realpath(absolute);
-    const normalizedReal = normalizePath(realPath);
-    const isRealPathAllowed = allowedDirectories.some(dir => normalizedReal.startsWith(dir));
-    if (!isRealPathAllowed) {
-      throw new Error("Access denied - symlink target outside allowed directories");
+    // Ensure the resolved path is still within the vault directory
+    if (!normalizePath(realPath).startsWith(vaultDirectory)) {
+      throw new Error("Access denied - symlink target outside vault directory");
     }
     return realPath;
   } catch (error) {
@@ -84,10 +89,8 @@ async function validatePath(requestedPath: string): Promise<string> {
     const parentDir = path.dirname(absolute);
     try {
       const realParentPath = await fs.realpath(parentDir);
-      const normalizedParent = normalizePath(realParentPath);
-      const isParentAllowed = allowedDirectories.some(dir => normalizedParent.startsWith(dir));
-      if (!isParentAllowed) {
-        throw new Error("Access denied - parent directory outside allowed directories");
+      if (!normalizePath(realParentPath).startsWith(vaultDirectory)) {
+        throw new Error("Access denied - parent directory outside vault directory");
       }
       return absolute;
     } catch {
@@ -224,10 +227,8 @@ export async function findAllTasks(directoryPath: string): Promise<Task[]> {
   
   for (const filePath of markdownFiles) {
     try {
-      // For tests, we can skip the path validation
-      const validPath = process.env.NODE_ENV === 'test' ? 
-        filePath : await validatePath(filePath);
-      const tasks = await extractTasksFromFile(validPath);
+      // Extract tasks from each file
+      const tasks = await extractTasksFromFile(filePath);
       allTasks.push(...tasks);
     } catch (error) {
       console.error(`Error processing file ${filePath}:`, error);
@@ -379,8 +380,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           "Extract all tasks from markdown files in a directory. " +
           "Recursively scans all markdown files and extracts tasks based on the Obsidian Tasks format. " +
           "Returns structured data about each task including status, dates, and tags. " +
-          "The path parameter is optional; if not specified, it defaults to the first allowed directory. " +
-          "Only works within allowed directories.",
+          "The path parameter is optional; if not specified, it defaults to the vault root directory. " +
+          "The path must be relative to the vault directory and cannot contain directory traversal components (..).",
         inputSchema: zodToJsonSchema(ListAllTasksArgsSchema) as ToolInput,
       },
       {
@@ -390,8 +391,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           "Allows filtering tasks by status, dates, description, tags, priority, and path. " +
           "Each line in the query is treated as a filter with AND logic between lines. " +
           "Returns only tasks that match all query conditions. " +
-          "The path parameter is optional; if not specified, it defaults to the first allowed directory. " +
-          "Only works within allowed directories.",
+          "The path parameter is optional; if not specified, it defaults to the vault root directory. " +
+          "The path must be relative to the vault directory and cannot contain directory traversal components (..).",
         inputSchema: zodToJsonSchema(QueryTasksArgsSchema) as ToolInput,
       }
     ],
@@ -407,12 +408,11 @@ export async function handleListAllTasksRequest(args: any) {
       throw new Error(`Invalid arguments for list_all_tasks: ${parsed.error}`);
     }
     
-    // Use specified path or default to first allowed directory
-    const directoryPath = parsed.data.path || allowedDirectories[0];
+    // Use specified path or default to vault root directory
+    const relativePath = parsed.data.path || '.';
     
-    // For tests, we can skip the path validation
-    const validPath = process.env.NODE_ENV === 'test' ? 
-      directoryPath : await validatePath(directoryPath);
+    // Validate and resolve the path (even in test mode)
+    const validPath = await resolvePath(relativePath);
     
     const tasks = await findAllTasks(validPath);
     return {
@@ -434,12 +434,11 @@ export async function handleQueryTasksRequest(args: any) {
       throw new Error(`Invalid arguments for query_tasks: ${parsed.error}`);
     }
     
-    // Use specified path or default to first allowed directory
-    const directoryPath = parsed.data.path || allowedDirectories[0];
+    // Use specified path or default to vault root directory
+    const relativePath = parsed.data.path || '.';
     
-    // For tests, we can skip the path validation
-    const validPath = process.env.NODE_ENV === 'test' ? 
-      directoryPath : await validatePath(directoryPath);
+    // Validate and resolve the path (even in test mode)
+    const validPath = await resolvePath(relativePath);
     
     // Get all tasks from the directory
     const allTasks = await findAllTasks(validPath);
@@ -487,7 +486,7 @@ async function runServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Obsidian Tasks MCP Server running on stdio");
-  console.error("Allowed directories:", allowedDirectories);
+  console.error("Vault directory:", vaultDirectory);
 }
 
 // Don't run the server in test mode
