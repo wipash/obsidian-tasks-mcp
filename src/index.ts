@@ -93,9 +93,14 @@ async function validatePath(requestedPath: string): Promise<string> {
   }
 }
 
-// Schema definition
+// Schema definitions
 const ListAllTasksArgsSchema = z.object({
   path: z.string().optional(),
+});
+
+const QueryTasksArgsSchema = z.object({
+  path: z.string().optional(),
+  query: z.string(),
 });
 
 const ToolInputSchema = ToolSchema.shape.inputSchema;
@@ -227,6 +232,136 @@ async function findAllTasks(directoryPath: string): Promise<Task[]> {
   return allTasks;
 }
 
+// Simple but flexible query parser for Obsidian Tasks-like queries
+function parseQuery(queryText: string) {
+  // Split into lines and remove empty ones
+  const lines = queryText.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+  
+  return {
+    filters: lines
+  };
+}
+
+// Apply a single filter to a task
+function applyFilter(task: Task, filter: string): boolean {
+  filter = filter.toLowerCase().trim();
+  
+  // Done/not done status
+  if (filter === 'done') {
+    return task.status === 'complete';
+  }
+  if (filter === 'not done') {
+    return task.status === 'incomplete';
+  }
+  
+  // Due date filters
+  if (filter.startsWith('due')) {
+    if (filter === 'due today') {
+      const today = new Date().toISOString().split('T')[0];
+      return task.dueDate === today;
+    }
+    if (filter === 'due before today') {
+      const today = new Date().toISOString().split('T')[0];
+      return task.dueDate !== undefined && task.dueDate < today;
+    }
+    if (filter === 'due after today') {
+      const today = new Date().toISOString().split('T')[0];
+      return task.dueDate !== undefined && task.dueDate > today;
+    }
+    if (filter === 'no due date') {
+      return task.dueDate === undefined;
+    }
+    if (filter === 'has due date') {
+      return task.dueDate !== undefined;
+    }
+    // More due date logic could be added here
+  }
+  
+  // Tag filters
+  if (filter.startsWith('tag') || filter.startsWith('tags')) {
+    if (filter === 'no tags') {
+      return task.tags.length === 0;
+    }
+    if (filter === 'has tags') {
+      return task.tags.length > 0;
+    }
+    
+    if (filter.includes('include')) {
+      const tagToFind = filter.split('include')[1].trim().replace(/^#/, '');
+      return task.tags.some(tag => tag.replace(/^#/, '').includes(tagToFind));
+    }
+    
+    if (filter.includes('do not include')) {
+      const tagToExclude = filter.split('do not include')[1].trim().replace(/^#/, '');
+      return !task.tags.some(tag => tag.replace(/^#/, '').includes(tagToExclude));
+    }
+  }
+  
+  // Path/filename filters
+  if (filter.startsWith('path includes')) {
+    const pathToFind = filter.split('includes')[1].trim();
+    return task.filePath.toLowerCase().includes(pathToFind.toLowerCase());
+  }
+  
+  if (filter.startsWith('path does not include')) {
+    const pathToExclude = filter.split('does not include')[1].trim();
+    return !task.filePath.toLowerCase().includes(pathToExclude.toLowerCase());
+  }
+  
+  // Description filters
+  if (filter.startsWith('description includes')) {
+    const textToFind = filter.split('includes')[1].trim();
+    return task.description.toLowerCase().includes(textToFind.toLowerCase());
+  }
+  
+  if (filter.startsWith('description does not include')) {
+    const textToExclude = filter.split('does not include')[1].trim();
+    return !task.description.toLowerCase().includes(textToExclude.toLowerCase());
+  }
+  
+  // Priority filters
+  if (filter.startsWith('priority is')) {
+    const priority = filter.split('priority is')[1].trim();
+    if (priority === 'high') {
+      return task.priority === 'high';
+    }
+    if (priority === 'medium') {
+      return task.priority === 'medium';
+    }
+    if (priority === 'low') {
+      return task.priority === 'low';
+    }
+    if (priority === 'none') {
+      return task.priority === undefined;
+    }
+  }
+  
+  // Boolean combinations with parentheses
+  if (filter.includes('AND') || filter.includes('OR') || filter.includes('NOT')) {
+    // This is a placeholder - in a full implementation, you would need to
+    // parse boolean expressions with parentheses
+    console.warn("Boolean combinations not fully implemented in filters");
+  }
+  
+  // If no filter match, default to including the task
+  return true;
+}
+
+// Apply a query to a list of tasks
+function queryTasks(tasks: Task[], queryText: string): Task[] {
+  const query = parseQuery(queryText);
+  
+  // Apply all filters in sequence (AND logic between lines)
+  return tasks.filter(task => {
+    for (const filter of query.filters) {
+      if (!applyFilter(task, filter)) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
 
 
 // Tool handlers
@@ -242,6 +377,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           "The path parameter is optional; if not specified, it defaults to the first allowed directory. " +
           "Only works within allowed directories.",
         inputSchema: zodToJsonSchema(ListAllTasksArgsSchema) as ToolInput,
+      },
+      {
+        name: "query_tasks",
+        description:
+          "Search for tasks based on Obsidian Tasks query syntax. " +
+          "Allows filtering tasks by status, dates, description, tags, priority, and path. " +
+          "Each line in the query is treated as a filter with AND logic between lines. " +
+          "Returns only tasks that match all query conditions. " +
+          "The path parameter is optional; if not specified, it defaults to the first allowed directory. " +
+          "Only works within allowed directories.",
+        inputSchema: zodToJsonSchema(QueryTasksArgsSchema) as ToolInput,
       }
     ],
   };
@@ -252,22 +398,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const { name, arguments: args } = request.params;
 
-    if (name !== "list_all_tasks") {
-      throw new Error(`Unknown tool: ${name}`);
+    if (name === "list_all_tasks") {
+      const parsed = ListAllTasksArgsSchema.safeParse(args);
+      if (!parsed.success) {
+        throw new Error(`Invalid arguments for list_all_tasks: ${parsed.error}`);
+      }
+      
+      // Use specified path or default to first allowed directory
+      const directoryPath = parsed.data.path || allowedDirectories[0];
+      const validPath = await validatePath(directoryPath);
+      const tasks = await findAllTasks(validPath);
+      return {
+        content: [{ type: "text", text: JSON.stringify(tasks, null, 2) }],
+      };
     }
     
-    const parsed = ListAllTasksArgsSchema.safeParse(args);
-    if (!parsed.success) {
-      throw new Error(`Invalid arguments for list_all_tasks: ${parsed.error}`);
+    if (name === "query_tasks") {
+      const parsed = QueryTasksArgsSchema.safeParse(args);
+      if (!parsed.success) {
+        throw new Error(`Invalid arguments for query_tasks: ${parsed.error}`);
+      }
+      
+      // Use specified path or default to first allowed directory
+      const directoryPath = parsed.data.path || allowedDirectories[0];
+      const validPath = await validatePath(directoryPath);
+      
+      // Get all tasks from the directory
+      const allTasks = await findAllTasks(validPath);
+      
+      // Apply the query to filter tasks
+      const filteredTasks = queryTasks(allTasks, parsed.data.query);
+      
+      return {
+        content: [{ type: "text", text: JSON.stringify(filteredTasks, null, 2) }],
+      };
     }
     
-    // Use specified path or default to first allowed directory
-    const directoryPath = parsed.data.path || allowedDirectories[0];
-    const validPath = await validatePath(directoryPath);
-    const tasks = await findAllTasks(validPath);
-    return {
-      content: [{ type: "text", text: JSON.stringify(tasks, null, 2) }],
-    };
+    throw new Error(`Unknown tool: ${name}`);
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

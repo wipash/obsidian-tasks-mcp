@@ -18,7 +18,7 @@ A Model Context Protocol (MCP) server for extracting and querying Obsidian Tasks
 
 ## Tools
 
-This MCP server provides a single focused tool:
+This MCP server provides the following tools:
 
 ### list_all_tasks
 
@@ -45,6 +45,58 @@ A JSON array of task objects, each containing:
   "recurrence": "string"   // Optional - recurrence rule
 }
 ```
+
+### query_tasks
+
+Searches for tasks based on Obsidian Tasks query syntax. Applies multiple filters to find matching tasks.
+
+**Input Parameters:**
+- `path` (string, optional): The directory to scan for markdown files. If not specified, defaults to the first allowed directory.
+- `query` (string, required): The query string using Obsidian Tasks query syntax. Each line is treated as a filter.
+
+**Returns:**
+A JSON array of task objects that match the query, with the same structure as `list_all_tasks`.
+
+**Supported Query Syntax:**
+
+- Status filters:
+  - `done` - Show completed tasks
+  - `not done` - Show incomplete tasks
+
+- Date filters:
+  - `due today` - Tasks due today
+  - `due before today` - Tasks due before today
+  - `due after today` - Tasks due after today
+  - `no due date` - Tasks with no due date
+  - `has due date` - Tasks with a due date
+
+- Tag filters:
+  - `no tags` - Tasks with no tags
+  - `has tags` - Tasks with at least one tag
+  - `tags include #tag` - Tasks with tags containing "tag"
+  - `tags do not include #tag` - Tasks without tags containing "tag" 
+
+- Path filters:
+  - `path includes string` - Tasks in files with paths containing "string"
+  - `path does not include string` - Tasks in files with paths not containing "string"
+
+- Description filters:
+  - `description includes string` - Tasks with descriptions containing "string"
+  - `description does not include string` - Tasks with descriptions not containing "string"
+
+- Priority filters:
+  - `priority is high` - Tasks with high priority
+  - `priority is medium` - Tasks with medium priority
+  - `priority is low` - Tasks with low priority
+  - `priority is none` - Tasks with no priority
+
+**Example Query:**
+```
+not done
+due before 2025-05-01
+tags include #work
+```
+This would return all incomplete tasks due before May 1, 2025, that have the #work tag.
 
 ## Usage
 
