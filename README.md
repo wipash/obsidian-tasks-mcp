@@ -119,6 +119,16 @@ You can specify multiple directories:
 node dist/index.js /path/to/obsidian/vault /another/directory
 ```
 
+### Testing
+
+To run the test suite:
+
+```bash
+npm test
+```
+
+See [TESTING.md](TESTING.md) for detailed information about the test suite.
+
 ### Using with Claude
 
 Add this configuration to your Claude client that supports MCP:
