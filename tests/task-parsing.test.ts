@@ -1,4 +1,5 @@
-import { applyFilter, queryTasks, Task } from '../src/index.js';
+import { queryTasks, Task } from '../src/index.js';
+import { applyFilter } from '../src/TaskParser.js';
 
 describe('Task Parsing and Filtering', () => {
   // Disable the server auto-start for tests

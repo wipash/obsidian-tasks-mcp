@@ -127,33 +127,7 @@ const server = new Server(
 
 // Tool implementations
 
-// Task-related interfaces and functions
-export interface Task {
-  id: string;
-  description: string;
-  status: 'complete' | 'incomplete';
-  filePath: string;
-  lineNumber: number;
-  tags: string[];
-  dueDate?: string;
-  scheduledDate?: string;
-  createdDate?: string;
-  startDate?: string;
-  priority?: string;
-  recurrence?: string;
-}
-
-// Regular expression for finding tasks in markdown files, based on obsidian-tasks
-const taskRegex = /^([\s\t>]*)([-*+]|[0-9]+[.)])( +\[(.)?\])(.*)/u;
-const hashTagsRegex = /(^|\s)#[^ !@#$%^&*(),.?":{}|<>]+/g;
-
-// Date related regular expressions
-const dueDateRegex = /🗓️\s?(\d{4}-\d{2}-\d{2})/;
-const scheduledDateRegex = /⏳\s?(\d{4}-\d{2}-\d{2})/;
-const startDateRegex = /🛫\s?(\d{4}-\d{2}-\d{2})/;
-const createdDateRegex = /➕\s?(\d{4}-\d{2}-\d{2})/;
-const priorityRegex = /⏫|🔼|🔽/;
-const recurrenceRegex = /🔁\s?(.*?)(?=(\s|$))/;
+import { Task, parseTaskFromLine, queryTasks as filterTasks } from './TaskParser.js';
 
 export async function findAllMarkdownFiles(startPath: string): Promise<string[]> {
   const pattern = path.join(startPath, '**/*.md');
@@ -168,48 +142,8 @@ export async function extractTasksFromFile(filePath: string): Promise<Task[]> {
     
     for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
       const line = lines[lineNumber];
-      const match = line.match(taskRegex);
-      
-      if (match) {
-        const statusChar = match[4];
-        const description = match[5].trim();
-        
-        // Extract tags
-        const tags = (description.match(hashTagsRegex) || [])
-          .map(tag => tag.trim())
-          .filter(tag => tag.length > 0);
-        
-        // Check for dates
-        const dueMatch = description.match(dueDateRegex);
-        const scheduledMatch = description.match(scheduledDateRegex);
-        const startMatch = description.match(startDateRegex);
-        const createdMatch = description.match(createdDateRegex);
-        const recurrenceMatch = description.match(recurrenceRegex);
-        
-        // Determine priority
-        let priority = undefined;
-        if (description.includes('⏫')) priority = 'high';
-        else if (description.includes('🔼')) priority = 'medium';
-        else if (description.includes('🔽')) priority = 'low';
-        
-        // Create a unique ID
-        const id = `${filePath}:${lineNumber}`;
-        
-        const task: Task = {
-          id,
-          description,
-          status: ['x', 'X'].includes(statusChar) ? 'complete' : 'incomplete',
-          filePath,
-          lineNumber,
-          tags,
-          dueDate: dueMatch ? dueMatch[1] : undefined,
-          scheduledDate: scheduledMatch ? scheduledMatch[1] : undefined,
-          startDate: startMatch ? startMatch[1] : undefined,
-          createdDate: createdMatch ? createdMatch[1] : undefined,
-          priority,
-          recurrence: recurrenceMatch ? recurrenceMatch[1] : undefined
-        };
-        
+      const task = parseTaskFromLine(line, filePath, lineNumber);
+      if (task) {
         tasks.push(task);
       }
     }
@@ -238,134 +172,15 @@ export async function findAllTasks(directoryPath: string): Promise<Task[]> {
   return allTasks;
 }
 
-// Simple but flexible query parser for Obsidian Tasks-like queries
-export function parseQuery(queryText: string) {
-  // Split into lines and remove empty ones
-  const lines = queryText.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'));
-  
-  return {
-    filters: lines
-  };
-}
-
-// Apply a single filter to a task
-export function applyFilter(task: Task, filter: string): boolean {
-  filter = filter.toLowerCase().trim();
-  
-  // Done/not done status
-  if (filter === 'done') {
-    return task.status === 'complete';
-  }
-  if (filter === 'not done') {
-    return task.status === 'incomplete';
-  }
-  
-  // Due date filters
-  if (filter.startsWith('due') || filter === 'has due date' || filter === 'no due date') {
-    if (filter === 'due today') {
-      const today = new Date().toISOString().split('T')[0];
-      return task.dueDate === today;
-    }
-    if (filter === 'due before today') {
-      const today = new Date().toISOString().split('T')[0];
-      return task.dueDate !== undefined && task.dueDate < today;
-    }
-    if (filter === 'due after today') {
-      const today = new Date().toISOString().split('T')[0];
-      return task.dueDate !== undefined && task.dueDate > today;
-    }
-    if (filter === 'no due date') {
-      return task.dueDate === undefined;
-    }
-    if (filter === 'has due date') {
-      return task.dueDate !== undefined;
-    }
-    // More due date logic could be added here
-  }
-  
-  // Tag filters
-  if (filter.startsWith('tag') || filter.startsWith('tags')) {
-    if (filter === 'no tags') {
-      return task.tags.length === 0;
-    }
-    if (filter === 'has tags') {
-      return task.tags && task.tags.length > 0;
-    }
-    
-    if (filter.includes('include')) {
-      const tagToFind = filter.split('include')[1].trim().replace(/^#/, '');
-      return task.tags.some(tag => tag.replace(/^#/, '').includes(tagToFind));
-    }
-    
-    if (filter.includes('do not include')) {
-      const tagToExclude = filter.split('do not include')[1].trim().replace(/^#/, '');
-      return !task.tags.some(tag => tag.replace(/^#/, '').includes(tagToExclude));
-    }
-  }
-  
-  // Path/filename filters
-  if (filter.startsWith('path includes')) {
-    const pathToFind = filter.split('includes')[1].trim();
-    return task.filePath.toLowerCase().includes(pathToFind.toLowerCase());
-  }
-  
-  if (filter.startsWith('path does not include')) {
-    const pathToExclude = filter.split('does not include')[1].trim();
-    return !task.filePath.toLowerCase().includes(pathToExclude.toLowerCase());
-  }
-  
-  // Description filters
-  if (filter.startsWith('description includes')) {
-    const textToFind = filter.split('includes')[1].trim();
-    return task.description.toLowerCase().includes(textToFind.toLowerCase());
-  }
-  
-  if (filter.startsWith('description does not include')) {
-    const textToExclude = filter.split('does not include')[1].trim();
-    return !task.description.toLowerCase().includes(textToExclude.toLowerCase());
-  }
-  
-  // Priority filters
-  if (filter.startsWith('priority is')) {
-    const priority = filter.split('priority is')[1].trim();
-    if (priority === 'high') {
-      return task.priority === 'high';
-    }
-    if (priority === 'medium') {
-      return task.priority === 'medium';
-    }
-    if (priority === 'low') {
-      return task.priority === 'low';
-    }
-    if (priority === 'none') {
-      return task.priority === undefined;
-    }
-  }
-  
-  // Boolean combinations with parentheses
-  if (filter.includes('AND') || filter.includes('OR') || filter.includes('NOT')) {
-    // This is a placeholder - in a full implementation, you would need to
-    // parse boolean expressions with parentheses
-    console.warn("Boolean combinations not fully implemented in filters");
-  }
-  
-  // If no filter match, default to including the task
-  return true;
-}
-
 // Apply a query to a list of tasks
 export function queryTasks(tasks: Task[], queryText: string): Task[] {
-  const query = parseQuery(queryText);
-  
-  // Apply all filters in sequence (AND logic between lines)
-  return tasks.filter(task => {
-    for (const filter of query.filters) {
-      if (!applyFilter(task, filter)) {
-        return false;
-      }
-    }
-    return true;
-  });
+  try {
+    return filterTasks(tasks, queryText);
+  } catch (error) {
+    console.error(`Error querying tasks: ${error}`);
+    // If the query fails, return an empty list
+    return [];
+  }
 }
 
 
