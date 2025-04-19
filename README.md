@@ -1,41 +1,105 @@
 # Obsidian Tasks MCP Server
 
-Node.js server implementing Model Context Protocol (MCP) for Obsidian Tasks integration.
+A Model Context Protocol (MCP) server for extracting and querying Obsidian Tasks from markdown files. Designed to work with Claude via the MCP protocol to enable AI-assisted task management.
 
 ## Features
 
-- Parse Obsidian markdown files to extract tasks
+- Extract tasks from Obsidian markdown files with a format compatible with the Obsidian Tasks plugin
 - Identify completed and pending tasks
-- Search and filter tasks by various criteria
-- Access task metadata (completion status, due dates, tags, etc.)
+- Access task metadata including:
+  - Status (complete/incomplete)
+  - Due dates
+  - Scheduled dates
+  - Start dates
+  - Created dates
+  - Tags
+  - Priority
+  - Recurrence rules
 
-**Note**: The server will only allow operations within directories specified via `args`.
+## Tools
 
-## API
+This MCP server provides a single focused tool:
 
-### Resources
+### list_all_tasks
 
-- `obsidian://tasks`: Obsidian Tasks operations interface
+Extracts all tasks from markdown files in a directory, recursively scanning through subfolders.
 
-### Tools
+**Input Parameters:**
+- `path` (string, optional): The directory to scan for markdown files. If not specified, defaults to the first allowed directory.
 
-- **list_all_tasks**
-  - Lists all tasks
+**Returns:**
+A JSON array of task objects, each containing:
+```json
+{
+  "id": "string",          // Unique identifier (filepath:linenumber)
+  "description": "string", // Full text description of the task
+  "status": "complete" | "incomplete", // Task completion status
+  "filePath": "string",    // Path to the file containing the task
+  "lineNumber": "number",  // Line number in the file
+  "tags": ["string"],      // Array of tags found in the task
+  "dueDate": "string",     // Optional - YYYY-MM-DD format 
+  "scheduledDate": "string", // Optional - YYYY-MM-DD format
+  "startDate": "string",   // Optional - YYYY-MM-DD format
+  "createdDate": "string", // Optional - YYYY-MM-DD format
+  "priority": "string",    // Optional - "high", "medium", or "low"
+  "recurrence": "string"   // Optional - recurrence rule
+}
+```
 
-- **search_tasks**
-  - Search tasks based on various criteria
-  - Inputs:
-    - `filters` (object): Filter criteria (status, tags, due dates, etc.)
+## Usage
 
-## Usage with Claude Desktop
+### Installation
 
-Add this to your `claude_desktop_config.json`:
+```bash
+npm install
+npm run build
+```
 
-Note: you can provide sandboxed directories to the server by mounting them to `/projects`. Adding the `ro` flag will make the directory readonly by the server.
+### Running the Server
+
+```bash
+node dist/index.js /path/to/obsidian/vault
+```
+
+You can specify multiple directories:
+
+```bash
+node dist/index.js /path/to/obsidian/vault /another/directory
+```
+
+### Using with Claude
+
+Add this configuration to your Claude client that supports MCP:
+
+```json
+{
+  "mcpServers": {
+    "obsidian-tasks": {
+      "command": "node",
+      "args": [
+        "/path/to/obsidian-tasks-mcp/dist/index.js",
+        "/path/to/obsidian/vault"
+      ]
+    }
+  }
+}
+```
 
 ### Docker
 
-Note: all directories must be mounted to `/projects` by default.
+Build the Docker image:
+
+```bash
+docker build -t obsidian-tasks-mcp .
+```
+
+Run with Docker:
+
+```bash
+docker run -i --rm --mount type=bind,src=/path/to/obsidian/vault,dst=/projects/vault obsidian-tasks-mcp /projects
+```
+
+Claude Desktop configuration:
 
 ```json
 {
@@ -55,31 +119,22 @@ Note: all directories must be mounted to `/projects` by default.
 }
 ```
 
-### NPX
+## Task Format
 
-```json
-{
-  "mcpServers": {
-    "obsidian-tasks": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "obsidian-tasks-mcp",
-        "/path/to/obsidian/vault"
-      ]
-    }
-  }
-}
-```
+The server recognizes the following Obsidian Tasks format:
 
-## Build
+- Task syntax: `- [ ] Task description`
+- Completed task: `- [x] Task description`
+- Due date: `🗓️ YYYY-MM-DD`
+- Scheduled date: `⏳ YYYY-MM-DD`
+- Start date: `🛫 YYYY-MM-DD`
+- Created date: `➕ YYYY-MM-DD`
+- Priority: `⏫` (high), `🔼` (medium), `🔽` (low)
+- Recurrence: `🔁 every day/week/month/etc.`
+- Tags: `#tag1 #tag2`
 
-Docker build:
-
-```bash
-docker build -t obsidian-tasks-mcp .
-```
+Example task: `- [ ] Complete project report 🗓️ 2025-05-01 ⏳ 2025-04-25 #work #report ⏫`
 
 ## License
 
-This MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License.
+MIT License
