@@ -1,5 +1,7 @@
 # Obsidian Tasks MCP Server
 
+[![npm version](https://badge.fury.io/js/%40jfim%2Fobsidian-tasks-mcp.svg)](https://badge.fury.io/js/%40jfim%2Fobsidian-tasks-mcp)
+
 A Model Context Protocol (MCP) server for extracting and querying Obsidian Tasks from markdown files. Designed to work with Claude via the MCP protocol to enable AI-assisted task management.
 
 ## Features
@@ -102,12 +104,38 @@ This would return all incomplete tasks due before May 1, 2025, that have the #wo
 
 ### Installation
 
+From npm (recommended):
+
 ```bash
+# Install globally
+npm install -g @jfim/obsidian-tasks-mcp
+
+# Or use directly with npx without installing
+npx @jfim/obsidian-tasks-mcp /path/to/obsidian/vault
+```
+
+From source:
+
+```bash
+git clone https://github.com/jfim/obsidian-tasks-mcp.git
+cd obsidian-tasks-mcp
 npm install
 npm run build
 ```
 
 ### Running the Server
+
+Using npm package (recommended):
+
+```bash
+# If installed globally
+obsidian-tasks-mcp /path/to/obsidian/vault
+
+# Or with npx (no installation required)
+npx @jfim/obsidian-tasks-mcp /path/to/obsidian/vault
+```
+
+From source:
 
 ```bash
 node dist/index.js /path/to/obsidian/vault
@@ -116,7 +144,7 @@ node dist/index.js /path/to/obsidian/vault
 You can specify multiple directories:
 
 ```bash
-node dist/index.js /path/to/obsidian/vault /another/directory
+npx @jfim/obsidian-tasks-mcp /path/to/obsidian/vault /another/directory
 ```
 
 ### Testing
@@ -137,6 +165,22 @@ Add this configuration to your Claude client that supports MCP:
 {
   "mcpServers": {
     "obsidian-tasks": {
+      "command": "npx",
+      "args": [
+        "@jfim/obsidian-tasks-mcp",
+        "/path/to/obsidian/vault"
+      ]
+    }
+  }
+}
+```
+
+If you installed from source:
+
+```json
+{
+  "mcpServers": {
+    "obsidian-tasks": {
       "command": "node",
       "args": [
         "/path/to/obsidian-tasks-mcp/dist/index.js",
@@ -152,13 +196,13 @@ Add this configuration to your Claude client that supports MCP:
 Build the Docker image:
 
 ```bash
-docker build -t obsidian-tasks-mcp .
+docker build -t @jfim/obsidian-tasks-mcp .
 ```
 
 Run with Docker:
 
 ```bash
-docker run -i --rm --mount type=bind,src=/path/to/obsidian/vault,dst=/projects/vault obsidian-tasks-mcp /projects
+docker run -i --rm --mount type=bind,src=/path/to/obsidian/vault,dst=/projects/vault @jfim/obsidian-tasks-mcp /projects
 ```
 
 Claude Desktop configuration:
@@ -173,7 +217,7 @@ Claude Desktop configuration:
         "-i",
         "--rm",
         "--mount", "type=bind,src=/path/to/obsidian/vault,dst=/projects/vault",
-        "obsidian-tasks-mcp",
+        "@jfim/obsidian-tasks-mcp",
         "/projects"
       ]
     }
