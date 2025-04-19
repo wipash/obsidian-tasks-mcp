@@ -1,5 +1,8 @@
 /**
- * TaskParser - Inspired by the upstream Obsidian Tasks, but simplified for MCP
+ * TaskParser - Inspired by Obsidian Tasks but simplified for MCP
+ * 
+ * This file contains a simplified implementation inspired by Obsidian Tasks
+ * but without the dependency complexity.
  */
 
 import moment from 'moment';
@@ -9,6 +12,7 @@ export interface Task {
   id: string;
   description: string;
   status: 'complete' | 'incomplete';
+  statusSymbol: string;
   filePath: string;
   lineNumber: number;
   tags: string[];
@@ -18,12 +22,36 @@ export interface Task {
   startDate?: string;
   priority?: string;
   recurrence?: string;
+  originalMarkdown: string;
 }
 
 // Regular expressions based on Obsidian Tasks conventions
 export class TaskRegex {
-  // Matches a task line: indentation, list marker, checkbox, contents
-  static readonly taskRegex = /^([\s\t>]*)([-*+]|[0-9]+[.)])( +\[(.)?\])(.*)/u;
+  // Matches indentation before a list marker (including > for potentially nested blockquotes or Obsidian callouts)
+  static readonly indentationRegex = /^([\s\t>]*)/;
+
+  // Matches - * and + list markers, or numbered list markers, for example 1. and 1)
+  static readonly listMarkerRegex = /([-*+]|[0-9]+[.)])/;
+
+  // Matches a checkbox and saves the status character inside
+  static readonly checkboxRegex = /\[(.)\]/u;
+
+  // Matches the rest of the task after the checkbox.
+  static readonly afterCheckboxRegex = / *(.*)/u;
+
+  // Main regex for parsing a line. It matches the following:
+  // - Indentation
+  // - List marker
+  // - Status character
+  // - Rest of task after checkbox markdown
+  static readonly taskRegex = new RegExp(
+    TaskRegex.indentationRegex.source +
+    TaskRegex.listMarkerRegex.source +
+    ' +' +
+    TaskRegex.checkboxRegex.source +
+    TaskRegex.afterCheckboxRegex.source,
+    'u',
+  );
   
   // Matches hashtags in task descriptions
   static readonly hashTags = /(^|\s)#[^ !@#$%^&*(),.?":{}|<>]+/g;
@@ -42,16 +70,38 @@ export class TaskRegex {
 }
 
 /**
+ * Parse a string containing text that may have tasks and extract Task objects.
+ * 
+ * @param text The text to parse for tasks
+ * @param filePath Optional file path for the task location
+ * @returns Array of Task objects
+ */
+export function parseTasks(text: string, filePath: string = ''): Task[] {
+  const lines = text.split('\n');
+  const tasks: Task[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const task = parseTaskLine(line, filePath, i);
+    if (task) {
+      tasks.push(task);
+    }
+  }
+
+  return tasks;
+}
+
+/**
  * Parse a task from a line of text
  */
-export function parseTaskFromLine(line: string, filePath: string, lineNumber: number): Task | null {
+export function parseTaskLine(line: string, filePath: string = '', lineNumber: number = 0): Task | null {
   const match = line.match(TaskRegex.taskRegex);
   if (!match) {
     return null;
   }
   
-  const statusChar = match[4];
-  const description = match[5].trim();
+  const statusChar = match[3];
+  const description = match[4].trim();
   
   // Extract tags
   const tags = (description.match(TaskRegex.hashTags) || [])
@@ -78,6 +128,7 @@ export function parseTaskFromLine(line: string, filePath: string, lineNumber: nu
     id,
     description,
     status: ['x', 'X'].includes(statusChar) ? 'complete' : 'incomplete',
+    statusSymbol: statusChar,
     filePath,
     lineNumber,
     tags,
@@ -86,7 +137,8 @@ export function parseTaskFromLine(line: string, filePath: string, lineNumber: nu
     startDate: startMatch ? startMatch[1] : undefined,
     createdDate: createdMatch ? createdMatch[1] : undefined,
     priority,
-    recurrence: recurrenceMatch ? recurrenceMatch[1] : undefined
+    recurrence: recurrenceMatch ? recurrenceMatch[1] : undefined,
+    originalMarkdown: line
   };
   
   return task;
@@ -97,6 +149,22 @@ export function parseTaskFromLine(line: string, filePath: string, lineNumber: nu
  */
 export function applyFilter(task: Task, filter: string): boolean {
   filter = filter.toLowerCase().trim();
+  
+  // Boolean combinations with AND, OR, NOT
+  if (filter.includes(' AND ')) {
+    const parts = filter.split(' AND ');
+    return parts.every(part => applyFilter(task, part.trim()));
+  }
+  
+  if (filter.includes(' OR ')) {
+    const parts = filter.split(' OR ');
+    return parts.some(part => applyFilter(task, part.trim()));
+  }
+  
+  if (filter.startsWith('not ')) {
+    const subFilter = filter.substring(4);
+    return !applyFilter(task, subFilter);
+  }
   
   // Done/not done status
   if (filter === 'done') {
@@ -129,23 +197,22 @@ export function applyFilter(task: Task, filter: string): boolean {
   }
   
   // Tag filters
-  if (filter.startsWith('tag') || filter.startsWith('tags')) {
-    if (filter === 'no tags') {
-      return task.tags.length === 0;
-    }
-    if (filter === 'has tags') {
-      return task.tags && task.tags.length > 0;
-    }
-    
-    if (filter.includes('include')) {
-      const tagToFind = filter.split('include')[1].trim().replace(/^#/, '');
-      return task.tags.some(tag => tag.replace(/^#/, '').includes(tagToFind));
-    }
-    
-    if (filter.includes('do not include')) {
-      const tagToExclude = filter.split('do not include')[1].trim().replace(/^#/, '');
-      return !task.tags.some(tag => tag.replace(/^#/, '').includes(tagToExclude));
-    }
+  if (filter === 'no tags') {
+    return !task.tags || task.tags.length === 0;
+  }
+  
+  if (filter === 'has tags') {
+    return task.tags && task.tags.length > 0;
+  }
+  
+  if (filter.startsWith('tag includes ')) {
+    const tagToFind = filter.split('tag includes ')[1].trim().replace(/^#/, '');
+    return task.tags && task.tags.some(tag => tag.replace(/^#/, '').includes(tagToFind));
+  }
+  
+  if (filter.startsWith('has tag ')) {
+    const tagToFind = filter.substring(8).trim().replace(/^#/, '');
+    return task.tags && task.tags.some(tag => tag.replace(/^#/, '').includes(tagToFind));
   }
   
   // Path/filename filters
@@ -187,24 +254,8 @@ export function applyFilter(task: Task, filter: string): boolean {
     }
   }
   
-  // Boolean combinations with AND, OR, NOT
-  if (filter.includes(' AND ')) {
-    const parts = filter.split(' AND ');
-    return parts.every(part => applyFilter(task, part));
-  }
-  
-  if (filter.includes(' OR ')) {
-    const parts = filter.split(' OR ');
-    return parts.some(part => applyFilter(task, part));
-  }
-  
-  if (filter.startsWith('NOT ')) {
-    const subFilter = filter.substring(4);
-    return !applyFilter(task, subFilter);
-  }
-  
-  // If no filter match, default to including the task
-  return true;
+  // If no filter match, check if description contains the filter text
+  return task.description.toLowerCase().includes(filter);
 }
 
 /**
@@ -232,4 +283,14 @@ export function queryTasks(tasks: Task[], queryText: string): Task[] {
     }
     return true;
   });
+}
+
+/**
+ * Convert a Task object back to its string representation
+ * 
+ * @param task Task object to convert
+ * @returns String representation of the task
+ */
+export function taskToString(task: Task): string {
+  return task.originalMarkdown;
 }

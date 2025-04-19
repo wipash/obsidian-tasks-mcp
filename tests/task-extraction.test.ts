@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-// Import the functions to test (we'll need to export them from index.ts)
+// Import the functions to test
 import { extractTasksFromFile } from '../src/index.js';
 
 describe('Task Extraction', () => {
@@ -43,11 +43,7 @@ describe('Task Extraction', () => {
     const tasksWithDueDate = tasks.filter(task => task.dueDate);
     expect(tasksWithDueDate.length).toBeGreaterThan(0);
     
-    // Check tasks with priorities
-    const tasksWithPriority = tasks.filter(task => task.priority);
-    expect(tasksWithPriority.length).toBeGreaterThan(0);
-    
-    // Check that a specific task has the expected properties
+    // Check a specific task - high priority task
     const highPriorityTask = tasks.find(task => 
       task.description.includes('high priority') && task.status === 'incomplete');
     

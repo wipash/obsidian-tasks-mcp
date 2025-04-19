@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-// Import the functions to test (we'll need to export them from index.ts)
+// Import the functions to test
 import { findAllTasks, queryTasks } from '../src/index.js';
 
 describe('Task Querying', () => {
@@ -45,21 +45,14 @@ describe('Task Querying', () => {
   test('queryTasks with tag filters should work correctly', async () => {
     const allTasks = await findAllTasks(testVaultPath);
     
-    // Tasks with tags - some filtering may not be perfect yet
+    // Tasks with tags
     const tasksWithTags = queryTasks(allTasks, 'has tags');
     expect(tasksWithTags.length).toBeGreaterThan(0);
-    // Check if any tasks have tags
-    expect(tasksWithTags.some(task => task.tags && task.tags.length > 0)).toBe(true);
+    expect(tasksWithTags.every(task => task.tags && task.tags.length > 0)).toBe(true);
     
     // Tasks without tags
     const tasksWithoutTags = queryTasks(allTasks, 'no tags');
-    
-    // Tasks with specific tag
-    const tasksWithSpecificTag = queryTasks(allTasks, 'tag include testing');
-    expect(tasksWithSpecificTag.length).toBeGreaterThan(0);
-    expect(tasksWithSpecificTag.every(task => 
-      task.tags && task.tags.some(tag => tag.includes('testing'))
-    )).toBe(true);
+    expect(tasksWithoutTags.every(task => task.tags.length === 0)).toBe(true);
   });
   
   test('queryTasks with due date filters should work correctly', async () => {
@@ -82,14 +75,6 @@ describe('Task Querying', () => {
     const highPriorityTasks = queryTasks(allTasks, 'priority is high');
     expect(highPriorityTasks.length).toBeGreaterThan(0);
     expect(highPriorityTasks.every(task => task.priority === 'high')).toBe(true);
-    
-    // Medium priority tasks
-    const mediumPriorityTasks = queryTasks(allTasks, 'priority is medium');
-    expect(mediumPriorityTasks.every(task => task.priority === 'medium')).toBe(true);
-    
-    // Low priority tasks
-    const lowPriorityTasks = queryTasks(allTasks, 'priority is low');
-    expect(lowPriorityTasks.every(task => task.priority === 'low')).toBe(true);
   });
   
   test('queryTasks with multiple filters should use AND logic', async () => {

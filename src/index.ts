@@ -67,8 +67,10 @@ async function resolvePath(relativePath: string = ''): Promise<string> {
   // Validate the relative path doesn't contain directory traversal
   validateRelativePath(relativePath);
   
-  // Resolve the path relative to vault directory
-  const absolute = path.join(vaultDirectory, relativePath);
+  // If relativePath is empty, use vault directory directly
+  const absolute = relativePath === '' 
+    ? vaultDirectory 
+    : path.join(vaultDirectory, relativePath);
   
   // For testing environment, we'll simplify path resolution
   if (process.env.NODE_ENV === 'test') {
@@ -116,7 +118,7 @@ type ToolInput = z.infer<typeof ToolInputSchema>;
 const server = new Server(
   {
     name: "obsidian-tasks-mcp",
-    version: "0.1.2",
+    version: "0.1.3",
   },
   {
     capabilities: {
@@ -127,7 +129,7 @@ const server = new Server(
 
 // Tool implementations
 
-import { Task, parseTaskFromLine, queryTasks as filterTasks } from './TaskParser.js';
+import { parseTasks, queryTasks as filterTasks, taskToString, Task } from './TaskParser.js';
 
 export async function findAllMarkdownFiles(startPath: string): Promise<string[]> {
   const pattern = path.join(startPath, '**/*.md');
@@ -137,16 +139,9 @@ export async function findAllMarkdownFiles(startPath: string): Promise<string[]>
 export async function extractTasksFromFile(filePath: string): Promise<Task[]> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    const lines = content.split('\n');
-    const tasks: Task[] = [];
     
-    for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
-      const line = lines[lineNumber];
-      const task = parseTaskFromLine(line, filePath, lineNumber);
-      if (task) {
-        tasks.push(task);
-      }
-    }
+    // Use the parseTasks function from TaskParser
+    const tasks = parseTasks(content, filePath);
     
     return tasks;
   } catch (error) {
@@ -181,6 +176,11 @@ export function queryTasks(tasks: Task[], queryText: string): Task[] {
     // If the query fails, return an empty list
     return [];
   }
+}
+
+// Helper function to serialize tasks to JSON
+export function serializeTasksToJson(tasks: Task[]): string {
+  return JSON.stringify(tasks, null, 2);
 }
 
 
@@ -224,14 +224,14 @@ export async function handleListAllTasksRequest(args: any) {
     }
     
     // Use specified path or default to vault root directory
-    const relativePath = parsed.data.path || '.';
+    const relativePath = parsed.data.path || '';
     
     // Validate and resolve the path (even in test mode)
     const validPath = await resolvePath(relativePath);
     
     const tasks = await findAllTasks(validPath);
     return {
-      content: [{ type: "text", text: JSON.stringify(tasks, null, 2) }],
+      content: [{ type: "text", text: serializeTasksToJson(tasks) }],
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -250,7 +250,7 @@ export async function handleQueryTasksRequest(args: any) {
     }
     
     // Use specified path or default to vault root directory
-    const relativePath = parsed.data.path || '.';
+    const relativePath = parsed.data.path || '';
     
     // Validate and resolve the path (even in test mode)
     const validPath = await resolvePath(relativePath);
@@ -262,7 +262,7 @@ export async function handleQueryTasksRequest(args: any) {
     const filteredTasks = queryTasks(allTasks, parsed.data.query);
     
     return {
-      content: [{ type: "text", text: JSON.stringify(filteredTasks, null, 2) }],
+      content: [{ type: "text", text: serializeTasksToJson(filteredTasks) }],
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
