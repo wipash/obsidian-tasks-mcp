@@ -1,0 +1,33 @@
+{
+  "name": "obsidian-tasks-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Obsidian Tasks integration",
+  "license": "MIT",
+  "author": "Jean-François Im",
+  "type": "module",
+  "bin": {
+    "obsidian-tasks-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && shx chmod +x dist/*.js",
+    "prepare": "npm run build",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "0.5.0",
+    "diff": "^5.1.0",
+    "glob": "^10.3.10",
+    "minimatch": "^10.0.1",
+    "zod-to-json-schema": "^3.23.5"
+  },
+  "devDependencies": {
+    "@types/diff": "^5.0.9",
+    "@types/minimatch": "^5.1.2",
+    "@types/node": "^22",
+    "shx": "^0.3.4",
+    "typescript": "^5.3.3"
+  }
+}
