@@ -62,8 +62,8 @@ export class TaskRegex {
   static readonly startDateRegex = /🛫\s?(\d{4}-\d{2}-\d{2})/;
   static readonly createdDateRegex = /➕\s?(\d{4}-\d{2}-\d{2})/;
   
-  // Priority emoji
-  static readonly priorityRegex = /⏫|🔼|🔽/;
+  // Priority emoji - order is important! Longest pattern first
+  static readonly priorityRegex = /(⏫⏫|⏫|🔼|🔽|⏬)/g;
   
   // Recurrence
   static readonly recurrenceRegex = /🔁\s?(.*?)(?=(\s|$))/;
@@ -115,11 +115,22 @@ export function parseTaskLine(line: string, filePath: string = '', lineNumber: n
   const createdMatch = description.match(TaskRegex.createdDateRegex);
   const recurrenceMatch = description.match(TaskRegex.recurrenceRegex);
   
-  // Determine priority
+  // Determine priority - check for highest priority first
   let priority = undefined;
-  if (description.includes('⏫')) priority = 'high';
-  else if (description.includes('🔼')) priority = 'medium';
-  else if (description.includes('🔽')) priority = 'low';
+  
+  // Use regex to find all priority markers in order of appearance
+  const priorityMatches = description.match(/⏫⏫|⏫|🔼|🔽|⏬/g);
+  
+  if (priorityMatches && priorityMatches.length > 0) {
+    // Use the first priority marker found
+    const firstPriority = priorityMatches[0];
+    
+    if (firstPriority === '⏫⏫') priority = 'highest';
+    else if (firstPriority === '⏫') priority = 'high';
+    else if (firstPriority === '🔼') priority = 'medium';
+    else if (firstPriority === '🔽') priority = 'low';
+    else if (firstPriority === '⏬') priority = 'lowest';
+  }
   
   // Create a unique ID
   const id = `${filePath}:${lineNumber}`;
@@ -256,6 +267,9 @@ export function applyFilter(task: Task, filter: string): boolean {
   // Priority filters
   if (filter.startsWith('priority is')) {
     const priority = filter.split('priority is')[1].trim();
+    if (priority === 'highest') {
+      return task.priority === 'highest';
+    }
     if (priority === 'high') {
       return task.priority === 'high';
     }
@@ -264,6 +278,9 @@ export function applyFilter(task: Task, filter: string): boolean {
     }
     if (priority === 'low') {
       return task.priority === 'low';
+    }
+    if (priority === 'lowest') {
+      return task.priority === 'lowest';
     }
     if (priority === 'none') {
       return task.priority === undefined;
