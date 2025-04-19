@@ -11,7 +11,7 @@ import moment from 'moment';
 export interface Task {
   id: string;
   description: string;
-  status: 'complete' | 'incomplete';
+  status: 'complete' | 'incomplete' | 'cancelled' | 'in_progress' | 'non_task';
   statusSymbol: string;
   filePath: string;
   lineNumber: number;
@@ -135,10 +135,25 @@ export function parseTaskLine(line: string, filePath: string = '', lineNumber: n
   // Create a unique ID
   const id = `${filePath}:${lineNumber}`;
   
+  // Determine task status from the statusChar
+  let status: Task['status'] = 'incomplete';
+  if (['x', 'X'].includes(statusChar)) {
+    status = 'complete';
+  } else if (['-'].includes(statusChar)) {
+    status = 'cancelled';
+  } else if (['/'].includes(statusChar)) {
+    status = 'in_progress';
+  } else if ([' ', '>', '<'].includes(statusChar)) {
+    status = 'incomplete';
+  } else {
+    // Any other character is treated as a non-task
+    status = 'non_task';
+  }
+  
   const task: Task = {
     id,
     description,
-    status: ['x', 'X'].includes(statusChar) ? 'complete' : 'incomplete',
+    status,
     statusSymbol: statusChar,
     filePath,
     lineNumber,
@@ -188,12 +203,19 @@ export function applyFilter(task: Task, filter: string): boolean {
     return !applyFilter(task, subFilter);
   }
   
-  // Done/not done status
+  // Status-based filters
   if (filter === 'done') {
     return task.status === 'complete';
   }
   if (filter === 'not done') {
-    return task.status === 'incomplete';
+    // Not done should only include tasks that are truly active (incomplete or in progress)
+    return task.status === 'incomplete' || task.status === 'in_progress';
+  }
+  if (filter === 'cancelled') {
+    return task.status === 'cancelled';
+  }
+  if (filter === 'in progress') {
+    return task.status === 'in_progress';
   }
   
   // Due date filters
