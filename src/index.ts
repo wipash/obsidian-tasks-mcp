@@ -116,7 +116,7 @@ type ToolInput = z.infer<typeof ToolInputSchema>;
 const server = new Server(
   {
     name: "obsidian-tasks-mcp",
-    version: "0.1.0",
+    version: "0.1.2",
   },
   {
     capabilities: {
