@@ -1,16 +1,30 @@
 {
   "name": "obsidian-tasks-mcp",
   "version": "0.1.0",
-  "description": "MCP server for Obsidian Tasks integration",
+  "description": "MCP server for Obsidian Tasks integration with Claude AI",
   "license": "MIT",
   "author": "Jean-François Im",
   "type": "module",
+  "keywords": [
+    "obsidian",
+    "tasks",
+    "mcp",
+    "claude",
+    "ai",
+    "model-context-protocol"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jfim/obsidian-tasks-mcp"
+  },
   "bin": {
     "obsidian-tasks-mcp": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "NPM-README.md"
   ],
+  "readme": "NPM-README.md",
   "scripts": {
     "build": "tsc && shx chmod +x dist/*.js",
     "prepare": "npm run build",

@@ -1,0 +1,29 @@
+# Development files
+node_modules/
+.idea/
+.vscode/
+.git/
+.github/
+
+# Obsidian directory
+obsidian-tasks/
+
+# Test files
+tests/
+jest.config.js
+
+# Source files (only dist is needed)
+src/
+
+# Build artifacts
+*.tsbuildinfo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Docker stuff
+Dockerfile
+.dockerignore
