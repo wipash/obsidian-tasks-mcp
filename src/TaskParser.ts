@@ -161,6 +161,17 @@ export function applyFilter(task: Task, filter: string): boolean {
     return parts.some(part => applyFilter(task, part.trim()));
   }
   
+  // Case insensitive versions
+  if (filter.includes(' and ')) {
+    const parts = filter.split(' and ');
+    return parts.every(part => applyFilter(task, part.trim()));
+  }
+  
+  if (filter.includes(' or ')) {
+    const parts = filter.split(' or ');
+    return parts.some(part => applyFilter(task, part.trim()));
+  }
+  
   if (filter.startsWith('not ')) {
     const subFilter = filter.substring(4);
     return !applyFilter(task, subFilter);
@@ -212,7 +223,12 @@ export function applyFilter(task: Task, filter: string): boolean {
   
   if (filter.startsWith('has tag ')) {
     const tagToFind = filter.substring(8).trim().replace(/^#/, '');
-    return task.tags && task.tags.some(tag => tag.replace(/^#/, '').includes(tagToFind));
+    return task.tags && task.tags.some(tag => {
+      // Remove # prefix for comparison
+      const normalizedTag = tag.replace(/^#/, '');
+      // For exact matching, check if the tag equals the search term
+      return normalizedTag === tagToFind;
+    });
   }
   
   // Path/filename filters
