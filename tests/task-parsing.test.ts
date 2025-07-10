@@ -7,6 +7,7 @@ const testTasks = [
   `- [ ] Task with #tag`,
   `- [ ] Task with high priority ⏫`,
   `- [ ] Task due today 🗓️ 2025-04-18`,
+  `- [ ] Task due today 📅 2025-04-18`, // The correct emoji for the ootb tasks plugin
   `- [x] Completed task`,
   `- [ ] Task in another file`
 ];
@@ -22,7 +23,7 @@ describe('Task Parsing and Filtering', () => {
   
   test('parseTaskLine should parse tasks correctly', () => {
     // Check that we parsed the expected number of tasks
-    expect(tasks.length).toBe(6);
+    expect(tasks.length).toBe(7);
     
     // Check that task properties are set correctly
     expect(tasks[0].description).toBe('Basic task');
@@ -36,9 +37,12 @@ describe('Task Parsing and Filtering', () => {
     
     // Task with due date
     expect(tasks[3].dueDate).toBe('2025-04-18');
+
+     // Task with due date
+    expect(tasks[4].dueDate).toBe('2025-04-18');
     
     // Completed task
-    expect(tasks[4].status).toBe('complete');
+    expect(tasks[5].status).toBe('complete');
   });
   
   test('applyFilter should filter tasks by done status', () => {
@@ -49,7 +53,7 @@ describe('Task Parsing and Filtering', () => {
     
     // Test not done filter
     const notDoneResults = tasks.filter(task => applyFilter(task, 'not done'));
-    expect(notDoneResults.length).toBe(5);
+    expect(notDoneResults.length).toBe(6);
     expect(notDoneResults.every(task => task.status === 'incomplete')).toBe(true);
   });
   
@@ -82,7 +86,7 @@ describe('Task Parsing and Filtering', () => {
     const notDescriptionResults = tasks.filter(task => 
       applyFilter(task, 'description does not include priority')
     );
-    expect(notDescriptionResults.length).toBe(5);
+    expect(notDescriptionResults.length).toBe(6);
     expect(notDescriptionResults.every(task => !task.description.includes('priority'))).toBe(true);
   });
   
@@ -92,7 +96,7 @@ describe('Task Parsing and Filtering', () => {
     expect(file1Results.length).toBe(5);
     
     const file2Results = tasks.filter(task => applyFilter(task, 'path includes file2'));
-    expect(file2Results.length).toBe(1);
+    expect(file2Results.length).toBe(2);
   });
   
   test('queryTasks should apply multiple filters with AND logic', () => {
@@ -100,7 +104,7 @@ describe('Task Parsing and Filtering', () => {
     path includes file1`;
     
     const result = queryTasks(tasks, multiFilterQuery);
-    expect(result.length).toBe(4);
+    expect(result.length).toBe(5);
     expect(result.every(task => 
       task.status === 'incomplete' && task.filePath.includes('file1')
     )).toBe(true);

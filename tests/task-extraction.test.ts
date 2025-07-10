@@ -25,11 +25,11 @@ describe('Task Extraction', () => {
     const tasks = await extractTasksFromFile(sampleTasksPath);
     
     // Should find the right number of tasks
-    expect(tasks.length).toBe(17); // Total tasks in sample-tasks.md
+    expect(tasks.length).toBe(18); // Total tasks in sample-tasks.md
     
     // Check incomplete tasks
     const incompleteTasks = tasks.filter(task => task.status === 'incomplete');
-    expect(incompleteTasks.length).toBe(13);
+    expect(incompleteTasks.length).toBe(14);
     
     // Check complete tasks
     const completeTasks = tasks.filter(task => task.status === 'complete');
