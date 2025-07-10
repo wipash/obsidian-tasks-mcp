@@ -238,6 +238,28 @@ export function applyFilter(task: Task, filter: string): boolean {
     if (filter === 'has due date') {
       return task.dueDate !== undefined;
     }
+    
+    // Handle specific date patterns
+    // Match patterns like "due 2024-02-07", "due on 2024-02-07"
+    const dueDateMatch = filter.match(/^due\s+(?:on\s+)?(\d{4}-\d{2}-\d{2})$/);
+    if (dueDateMatch) {
+      const targetDate = dueDateMatch[1];
+      return task.dueDate === targetDate;
+    }
+    
+    // Match patterns like "due before 2024-02-07"
+    const dueBeforeMatch = filter.match(/^due\s+before\s+(\d{4}-\d{2}-\d{2})$/);
+    if (dueBeforeMatch) {
+      const targetDate = dueBeforeMatch[1];
+      return task.dueDate !== undefined && task.dueDate < targetDate;
+    }
+    
+    // Match patterns like "due after 2024-02-07"
+    const dueAfterMatch = filter.match(/^due\s+after\s+(\d{4}-\d{2}-\d{2})$/);
+    if (dueAfterMatch) {
+      const targetDate = dueAfterMatch[1];
+      return task.dueDate !== undefined && task.dueDate > targetDate;
+    }
   }
   
   // Tag filters
