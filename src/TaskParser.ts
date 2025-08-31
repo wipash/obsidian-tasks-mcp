@@ -286,15 +286,21 @@ export function applyFilter(task: Task, filter: string): boolean {
     });
   }
   
-  // Path/filename filters
+  // Path/filename filters - normalize separators for cross-platform compatibility
   if (filter.startsWith('path includes')) {
     const pathToFind = filter.split('includes')[1].trim();
-    return task.filePath.toLowerCase().includes(pathToFind.toLowerCase());
+    // Normalize both paths to use forward slashes for comparison
+    const normalizedTaskPath = task.filePath.replace(/\\/g, '/').toLowerCase();
+    const normalizedSearchPath = pathToFind.replace(/\\/g, '/').toLowerCase();
+    return normalizedTaskPath.includes(normalizedSearchPath);
   }
   
   if (filter.startsWith('path does not include')) {
     const pathToExclude = filter.split('does not include')[1].trim();
-    return !task.filePath.toLowerCase().includes(pathToExclude.toLowerCase());
+    // Normalize both paths to use forward slashes for comparison
+    const normalizedTaskPath = task.filePath.replace(/\\/g, '/').toLowerCase();
+    const normalizedSearchPath = pathToExclude.replace(/\\/g, '/').toLowerCase();
+    return !normalizedTaskPath.includes(normalizedSearchPath);
   }
   
   // Description filters
