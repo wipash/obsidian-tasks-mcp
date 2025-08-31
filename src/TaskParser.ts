@@ -77,7 +77,7 @@ export class TaskRegex {
  * @returns Array of Task objects
  */
 export function parseTasks(text: string, filePath: string = ''): Task[] {
-  const lines = text.split('\n');
+  const lines = text.split(/\r?\n/);
   const tasks: Task[] = [];
 
   for (let i = 0; i < lines.length; i++) {
